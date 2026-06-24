@@ -506,10 +506,33 @@ $s.Speak($text)
             for item in self.kks.convert(text):
                 orig = item["orig"]
                 hira = item["hira"]
-                if KANJI_RE.search(orig):
-                    chunks.append(f"{orig}({hira})")
-                else:
+
+                if not KANJI_RE.search(orig):
                     chunks.append(orig)
+                    continue
+
+                okurigana = []
+                o_idx = len(orig) - 1
+                h_idx = len(hira) - 1
+
+                while o_idx >= 0 and h_idx >= 0:
+                    c_o = orig[o_idx]
+                    c_h = hira[h_idx]
+                    if c_o == c_h and (0x3040 <= ord(c_o) <= 0x30FF or c_o == "ー"):
+                        okurigana.append(c_o)
+                        o_idx -= 1
+                        h_idx -= 1
+                    else:
+                        break
+
+                if okurigana:
+                    tail = "".join(reversed(okurigana))
+                    kanji_part = orig[: o_idx + 1]
+                    reading_part = hira[: h_idx + 1]
+                    chunks.append(f"{kanji_part}({reading_part}){tail}")
+                else:
+                    chunks.append(f"{orig}({hira})")
+
             return "".join(chunks)
 
         text_to_check = result.furigana_text.strip() or text
