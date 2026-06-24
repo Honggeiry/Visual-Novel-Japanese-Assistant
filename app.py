@@ -249,7 +249,8 @@ class VNJapaneseTool(tk.Tk):
         self.right_panes.grid(row=0, column=0, sticky="nsew")
 
         detected_frame = self._make_panel(self.right_panes, "识别出的重点单词", "vocab")
-        self.vocab_tree = self._make_vocab_tree(detected_frame.body, selectmode="browse")
+        self.vocab_tree = self._make_vocab_tree(detected_frame.body, selectmode="extended")
+        self.vocab_tree.bind("<Double-1>", self._on_double_click_vocab)
         self.vocab_tree.pack(fill="both", expand=True)
         vocab_buttons = ttk.Frame(detected_frame.body)
         vocab_buttons.pack(fill="x", pady=(8, 0))
@@ -259,6 +260,7 @@ class VNJapaneseTool(tk.Tk):
 
         saved_frame = self._make_panel(self.right_panes, "单词本", "vocab")
         self.saved_tree = self._make_vocab_tree(saved_frame.body, selectmode="browse", include_time=True)
+        self.saved_tree.bind("<Double-1>", self._on_double_click_saved)
         self.saved_tree.pack(fill="both", expand=True)
         saved_buttons = ttk.Frame(saved_frame.body)
         saved_buttons.pack(fill="x", pady=(8, 0))
@@ -568,12 +570,59 @@ $s.Speak($text)
                 values=(word.get("expression", ""), word.get("reading", ""), word.get("meaning_zh", "")),
             )
 
+    def _on_double_click_vocab(self, event) -> None:
+        row_id = self.vocab_tree.identify_row(event.y)
+        if not row_id:
+            return
+        index = int(row_id)
+        saved = self._save_word_index(index, show_message=False)
+        try:
+            word_expr = self.current_result.vocabulary[index].get("expression", "")
+            if saved:
+                self.status_var.set(f"已快捷收藏单词：{word_expr}")
+            else:
+                self.status_var.set(f"单词已存在：{word_expr}")
+        except IndexError:
+            pass
+
+    def _on_double_click_saved(self, event) -> None:
+        row_id = self.saved_tree.identify_row(event.y)
+        if not row_id:
+            return
+        try:
+            db_id = int(row_id)
+            item_data = self.saved_tree.item(row_id)
+            word_expr = item_data.get("values", [""])[0]
+            if self.store.delete(db_id):
+                self.refresh_vocab()
+                self.status_var.set(f"已快捷删除单词：{word_expr}")
+        except (ValueError, IndexError, TypeError, KeyError):
+            pass
+
     def save_selected_word(self) -> None:
         selection = self.vocab_tree.selection()
         if not selection:
-            messagebox.showinfo("未选择单词", "请先在上方列表选择一个单词。")
+            messagebox.showinfo("未选择单词", "请先在上方列表选择要收藏的单词（支持按住 Ctrl 或 Shift 多选）。")
             return
-        self._save_word_index(int(selection[0]))
+
+        saved_count = 0
+        duplicate_count = 0
+
+        for item_id in selection:
+            if self._save_word_index(int(item_id), show_message=False):
+                saved_count += 1
+            else:
+                duplicate_count += 1
+
+        self.refresh_vocab()
+
+        if len(selection) == 1:
+            messagebox.showinfo("收藏结果", "已收藏。" if saved_count == 1 else "这个词已经收藏过了。")
+        else:
+            msg = f"成功收藏 {saved_count} 个单词。"
+            if duplicate_count > 0:
+                msg += f"\n（另有 {duplicate_count} 个单词已存在于单词本中）"
+            messagebox.showinfo("收藏结果", msg)
 
     def save_all_words(self) -> None:
         count = 0
