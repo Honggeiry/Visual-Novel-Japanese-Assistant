@@ -13,6 +13,11 @@ from tkinter import filedialog, messagebox, ttk
 from PIL import Image, ImageGrab, ImageTk
 
 try:
+    import pykakasi
+except ImportError:
+    pykakasi = None
+
+try:
     from .analyzer import AnalysisResult, AnalyzerError, BigModelAnalyzer
     from .storage import VocabEntry, VocabStore
 except ImportError:
@@ -160,6 +165,7 @@ class VNJapaneseTool(tk.Tk):
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         self.store = VocabStore(DB_PATH)
         self.analyzer = BigModelAnalyzer()
+        self.kks = pykakasi.kakasi() if pykakasi else None
         self.current_result = AnalysisResult()
         self.preview_image = None
         self.font_sizes = {
@@ -491,8 +497,23 @@ $s.Speak($text)
         self.status_var.set("分析完成")
 
     def _build_furigana_display(self, result: AnalysisResult) -> str:
-        text = result.furigana_text.strip() or result.original_text
-        annotated = self._annotate_from_vocabulary(text, result.vocabulary)
+        text = result.original_text.strip()
+        if not text:
+            return ""
+
+        if self.kks:
+            chunks = []
+            for item in self.kks.convert(text):
+                orig = item["orig"]
+                hira = item["hira"]
+                if KANJI_RE.search(orig):
+                    chunks.append(f"{orig}({hira})")
+                else:
+                    chunks.append(orig)
+            return "".join(chunks)
+
+        text_to_check = result.furigana_text.strip() or text
+        annotated = self._annotate_from_vocabulary(text_to_check, result.vocabulary)
         if KANJI_RE.search(re.sub(KANJI_GROUP_RE, "", annotated)):
             annotated = self._annotate_remaining_kanji(annotated)
         return annotated
