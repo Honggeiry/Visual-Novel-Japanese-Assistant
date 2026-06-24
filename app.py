@@ -187,7 +187,7 @@ class VNJapaneseTool(tk.Tk):
         style.configure("Title.TLabel", font=("Microsoft YaHei UI", 14, "bold"))
         style.configure("Section.TLabel", font=("Microsoft YaHei UI", 10, "bold"))
         style.configure("Status.TLabel", foreground="#555")
-        style.configure("Vocab.Treeview", font=("Meiryo", 12), rowheight=32)
+        style.configure("Vocab.Treeview", font=("楷体", 12), rowheight=32)
         style.configure("Vocab.Treeview.Heading", font=("Microsoft YaHei UI", 10, "bold"))
 
     def _build_ui(self) -> None:
@@ -319,7 +319,21 @@ class VNJapaneseTool(tk.Tk):
             self.grammar_text.configure(font=("Microsoft YaHei UI", size))
         elif key == "vocab":
             rowheight = max(28, int(size * 2.6))
-            ttk.Style(self).configure("Vocab.Treeview", font=("Meiryo", size), rowheight=rowheight)
+            ttk.Style(self).configure("Vocab.Treeview", font=("楷体", size), rowheight=rowheight)
+
+    def _clean_reading(self, expr: str, raw_reading: str) -> str:
+        if not expr:
+            return raw_reading
+        if self.kks:
+            kana_list = []
+            for item in self.kks.convert(expr):
+                orig = item["orig"]
+                if re.fullmatch(r"[\u30a0-\u30ffー]+", orig):
+                    kana_list.append(orig)
+                else:
+                    kana_list.append(item["hira"])
+            return "".join(kana_list)
+        return KANJI_GROUP_RE.sub(r"\2", raw_reading)
 
     def _initial_status(self) -> str:
         if self.analyzer.is_configured:
@@ -462,6 +476,12 @@ $s.Speak($text)
         self._replace_text(self.original_text, result.original_text)
         self.furigana_view.set_text(self._build_furigana_display(result))
         self._replace_text(self.translation_text, result.translation_zh)
+
+        for word in result.vocabulary:
+            expr = word.get("expression", "")
+            raw_read = word.get("reading", "")
+            word["reading"] = self._clean_reading(expr, raw_read)
+
         grammar_lines = []
         if result.grammar:
             grammar_lines.append("【语法】")
@@ -681,10 +701,13 @@ $s.Speak($text)
             word = self.current_result.vocabulary[index]
         except IndexError:
             return False
+
+        clean_read = self._clean_reading(word.get("expression", ""), word.get("reading", ""))
+
         saved = self.store.add(
             VocabEntry(
                 expression=word.get("expression", ""),
-                reading=word.get("reading", ""),
+                reading=clean_read,
                 meaning=word.get("meaning_zh", ""),
                 sentence=self.current_result.original_text,
                 source="visual novel",
@@ -708,11 +731,12 @@ $s.Speak($text)
         for item in self.saved_tree.get_children():
             self.saved_tree.delete(item)
         for row in self.store.list_all():
+            disp_reading = self._clean_reading(row["expression"], row["reading"])
             self.saved_tree.insert(
                 "",
                 "end",
                 iid=str(row["id"]),
-                values=(row["expression"], row["reading"], row["meaning"], row["created_at"]),
+                values=(row["expression"], disp_reading, row["meaning"], row["created_at"]),
             )
 
     def export_csv(self) -> None:
