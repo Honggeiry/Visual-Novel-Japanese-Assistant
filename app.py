@@ -173,7 +173,8 @@ class VNJapaneseTool(tk.Tk):
             "furigana": tk.IntVar(value=14),
             "translation": tk.IntVar(value=10),
             "grammar": tk.IntVar(value=10),
-            "vocab": tk.IntVar(value=12),
+            "detected_vocab": tk.IntVar(value=12),
+            "saved_vocab": tk.IntVar(value=12),
         }
 
         self._build_style()
@@ -187,8 +188,12 @@ class VNJapaneseTool(tk.Tk):
         style.configure("Title.TLabel", font=("Microsoft YaHei UI", 14, "bold"))
         style.configure("Section.TLabel", font=("Microsoft YaHei UI", 10, "bold"))
         style.configure("Status.TLabel", foreground="#555")
-        style.configure("Vocab.Treeview", font=("楷体", 12), rowheight=32)
-        style.configure("Vocab.Treeview.Heading", font=("Microsoft YaHei UI", 10, "bold"))
+
+        style.configure("Detected.Treeview", font=("楷体", 12), rowheight=32)
+        style.configure("Detected.Treeview.Heading", font=("Microsoft YaHei UI", 10, "bold"))
+
+        style.configure("Saved.Treeview", font=("楷体", 12), rowheight=32)
+        style.configure("Saved.Treeview.Heading", font=("Microsoft YaHei UI", 10, "bold"))
 
     def _build_ui(self) -> None:
         root = ttk.Frame(self, padding=12)
@@ -254,25 +259,27 @@ class VNJapaneseTool(tk.Tk):
         self.right_panes = tk.PanedWindow(right, orient=tk.VERTICAL, sashwidth=7, sashrelief=tk.RAISED, bg="#dddddd")
         self.right_panes.grid(row=0, column=0, sticky="nsew")
 
-        detected_frame = self._make_panel(self.right_panes, "识别出的重点单词", "vocab")
-        self.vocab_tree = self._make_vocab_tree(detected_frame.body, selectmode="extended")
-        self.vocab_tree.bind("<Double-1>", self._on_double_click_vocab)
-        self.vocab_tree.pack(fill="both", expand=True)
+        detected_frame = self._make_panel(self.right_panes, "识别出的重点单词", "detected_vocab")
         vocab_buttons = ttk.Frame(detected_frame.body)
-        vocab_buttons.pack(fill="x", pady=(8, 0))
+        vocab_buttons.pack(side="bottom", fill="x", pady=(6, 0))
         ttk.Button(vocab_buttons, text="收藏选中单词", command=self.save_selected_word).pack(side="left")
         ttk.Button(vocab_buttons, text="全部收藏", command=self.save_all_words).pack(side="left", padx=8)
+
+        self.vocab_tree = self._make_vocab_tree(detected_frame.body, selectmode="extended", style_name="Detected.Treeview")
+        self.vocab_tree.bind("<Double-1>", self._on_double_click_vocab)
+        self.vocab_tree.pack(side="top", fill="both", expand=True)
         self.right_panes.add(detected_frame, minsize=150, height=310)
 
-        saved_frame = self._make_panel(self.right_panes, "单词本", "vocab")
-        self.saved_tree = self._make_vocab_tree(saved_frame.body, selectmode="browse", include_time=True)
-        self.saved_tree.bind("<Double-1>", self._on_double_click_saved)
-        self.saved_tree.pack(fill="both", expand=True)
+        saved_frame = self._make_panel(self.right_panes, "单词本", "saved_vocab")
         saved_buttons = ttk.Frame(saved_frame.body)
-        saved_buttons.pack(fill="x", pady=(8, 0))
+        saved_buttons.pack(side="bottom", fill="x", pady=(6, 0))
         ttk.Button(saved_buttons, text="删除选中", command=self.delete_saved_word).pack(side="left")
         ttk.Button(saved_buttons, text="刷新", command=self.refresh_vocab).pack(side="left", padx=8)
         ttk.Button(saved_buttons, text="导出 CSV", command=self.export_csv).pack(side="left")
+
+        self.saved_tree = self._make_vocab_tree(saved_frame.body, selectmode="browse", include_time=True, style_name="Saved.Treeview")
+        self.saved_tree.bind("<Double-1>", self._on_double_click_saved)
+        self.saved_tree.pack(side="top", fill="both", expand=True)
         self.right_panes.add(saved_frame, minsize=150, height=310)
 
     def _make_panel(self, parent: tk.PanedWindow, title: str, key: str):
@@ -293,9 +300,9 @@ class VNJapaneseTool(tk.Tk):
         ttk.Button(frame, text="+", width=2, command=lambda: self._change_font_size(key, 1, command)).pack(side="left")
         return frame
 
-    def _make_vocab_tree(self, parent: tk.Widget, selectmode: str, include_time: bool = False) -> ttk.Treeview:
+    def _make_vocab_tree(self, parent: tk.Widget, selectmode: str, include_time: bool = False, style_name: str = "Vocab.Treeview") -> ttk.Treeview:
         columns = ("expression", "reading", "meaning", "created_at") if include_time else ("expression", "reading", "meaning")
-        tree = ttk.Treeview(parent, columns=columns, show="headings", selectmode=selectmode, style="Vocab.Treeview")
+        tree = ttk.Treeview(parent, columns=columns, show="headings", selectmode=selectmode, style=style_name)
         headings = {"expression": "单词", "reading": "读音", "meaning": "意思", "created_at": "时间"}
         widths = {"expression": 110, "reading": 110, "meaning": 180, "created_at": 120}
         for key in columns:
@@ -317,9 +324,12 @@ class VNJapaneseTool(tk.Tk):
             self.translation_text.configure(font=("Microsoft YaHei UI", size))
         elif key == "grammar":
             self.grammar_text.configure(font=("Microsoft YaHei UI", size))
-        elif key == "vocab":
+        elif key == "detected_vocab":
             rowheight = max(28, int(size * 2.6))
-            ttk.Style(self).configure("Vocab.Treeview", font=("楷体", size), rowheight=rowheight)
+            ttk.Style(self).configure("Detected.Treeview", font=("楷体", size), rowheight=rowheight)
+        elif key == "saved_vocab":
+            rowheight = max(28, int(size * 2.6))
+            ttk.Style(self).configure("Saved.Treeview", font=("楷体", size), rowheight=rowheight)
 
     def _clean_reading(self, expr: str, raw_reading: str) -> str:
         if not expr:
@@ -411,18 +421,24 @@ class VNJapaneseTool(tk.Tk):
 Add-Type -AssemblyName System.Speech
 $text = Get-Content -LiteralPath '{path}' -Raw -Encoding UTF8
 $s = New-Object System.Speech.Synthesis.SpeechSynthesizer
-try {{
-  $s.SelectVoice('Microsoft Ichiro')
-}} catch {{
-  try {{
-    $culture = New-Object System.Globalization.CultureInfo('ja-JP')
-    $s.SelectVoiceByHints([System.Speech.Synthesis.VoiceGender]::Male, [System.Speech.Synthesis.VoiceAge]::Adult, 0, $culture)
-  }} catch {{
-    try {{
-      $culture = New-Object System.Globalization.CultureInfo('ja-JP')
-      $s.SelectVoiceByHints([System.Speech.Synthesis.VoiceGender]::NotSet, [System.Speech.Synthesis.VoiceAge]::Adult, 0, $culture)
-    }} catch {{}}
-  }}
+
+$male = $s.GetInstalledVoices() | Where-Object {{
+    ($_.VoiceInfo.Culture.TwoLetterISOLanguageName -eq 'ja') -and
+    ($_.VoiceInfo.Gender -eq 'Male')
+}} | Select-Object -First 1
+
+if ($male) {{
+    $s.SelectVoice($male.VoiceInfo.Name)
+}} else {{
+    $ichiro = $s.GetInstalledVoices() | Where-Object {{ $_.VoiceInfo.Name -like '*Ichiro*' }} | Select-Object -First 1
+    if ($ichiro) {{
+        $s.SelectVoice($ichiro.VoiceInfo.Name)
+    }} else {{
+        try {{
+            $culture = New-Object System.Globalization.CultureInfo('ja-JP')
+            $s.SelectVoiceByHints([System.Speech.Synthesis.VoiceGender]::Male, [System.Speech.Synthesis.VoiceAge]::Adult, 0, $culture)
+        }} catch {{}}
+    }}
 }}
 $s.Rate = -1
 $s.Speak($text)
